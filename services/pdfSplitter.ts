@@ -2,7 +2,7 @@
 import { PDFDocument } from 'https://cdn.skypack.dev/pdf-lib@^1.17.1';
 import type { PDFChunk } from '../types';
 
-export const splitPdf = async (file: File, maxChunkSize: number): Promise<PDFChunk[]> => {
+export const splitPdfBySize = async (file: File, maxChunkSize: number): Promise<PDFChunk[]> => {
     const fileBuffer = await file.arrayBuffer();
     const originalPdf = await PDFDocument.load(fileBuffer);
     const totalPages = originalPdf.getPageCount();
@@ -58,6 +58,34 @@ export const splitPdf = async (file: File, maxChunkSize: number): Promise<PDFChu
         const chunkBlob = new Blob([chunkBytes], { type: 'application/pdf' });
         chunks.push({
             name: `${file.name.replace(/\.pdf$/i, '')}-part-${chunkIndex++}.pdf`,
+            blob: chunkBlob,
+            size: chunkBlob.size,
+        });
+    }
+
+    return chunks;
+};
+
+export const splitPdfByPage = async (file: File): Promise<PDFChunk[]> => {
+    const fileBuffer = await file.arrayBuffer();
+    const originalPdf = await PDFDocument.load(fileBuffer);
+    const totalPages = originalPdf.getPageCount();
+    const chunks: PDFChunk[] = [];
+    const baseName = file.name.replace(/\.pdf$/i, '');
+
+    if (totalPages === 0) {
+        return [];
+    }
+
+    for (let i = 0; i < totalPages; i++) {
+        const newPdf = await PDFDocument.create();
+        const [copiedPage] = await newPdf.copyPages(originalPdf, [i]);
+        newPdf.addPage(copiedPage);
+
+        const chunkBytes = await newPdf.save();
+        const chunkBlob = new Blob([chunkBytes], { type: 'application/pdf' });
+        chunks.push({
+            name: `${baseName}-page-${i + 1}.pdf`,
             blob: chunkBlob,
             size: chunkBlob.size,
         });

@@ -4,17 +4,20 @@ import type { PDFChunk } from './types';
 import { FileUploader } from './components/FileUploader';
 import { ChunkList } from './components/ChunkList';
 import { Spinner } from './components/Spinner';
-import { FileIcon, XIcon } from './components/icons';
-import { splitPdf } from './services/pdfSplitter';
+import { FileIcon, XIcon, LayersIcon, FileTextIcon } from './components/icons';
+import { splitPdfBySize, splitPdfByPage } from './services/pdfSplitter';
 import { formatBytes } from './utils/formatBytes';
 
 const MAX_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
+type SplitMode = 'size' | 'page';
 
 export default function App(): React.ReactElement {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [chunks, setChunks] = useState<PDFChunk[]>([]);
   const [isSplitting, setIsSplitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [splitMode, setSplitMode] = useState<SplitMode | null>(null);
+
 
   const handleFileSelect = useCallback((file: File) => {
     if (file.type !== 'application/pdf') {
@@ -24,17 +27,24 @@ export default function App(): React.ReactElement {
     setPdfFile(file);
     setChunks([]);
     setError(null);
+    setSplitMode(null);
   }, []);
 
   const handleSplitPdf = async () => {
-    if (!pdfFile) return;
+    if (!pdfFile || !splitMode) return;
 
     setIsSplitting(true);
     setError(null);
     setChunks([]);
 
     try {
-      const resultingChunks = await splitPdf(pdfFile, MAX_CHUNK_SIZE);
+      let resultingChunks: PDFChunk[] = [];
+      if (splitMode === 'size') {
+        resultingChunks = await splitPdfBySize(pdfFile, MAX_CHUNK_SIZE);
+      } else {
+        resultingChunks = await splitPdfByPage(pdfFile);
+      }
+      
       if (resultingChunks.length === 0) {
           setError('Не удалось обработать PDF. Возможно, файл пуст или поврежден.');
       } else {
@@ -53,6 +63,7 @@ export default function App(): React.ReactElement {
     setChunks([]);
     setError(null);
     setIsSplitting(false);
+    setSplitMode(null);
   };
 
   return (
@@ -61,7 +72,7 @@ export default function App(): React.ReactElement {
         <header className="text-center mb-8">
           <h1 className="text-3xl font-bold text-slate-800">Разделитель PDF</h1>
           <p className="text-slate-500 mt-2">
-            Разделите большие PDF-файлы на части до 10 МБ.
+            Разделите большие PDF-файлы на части по размеру или постранично.
           </p>
         </header>
 
@@ -88,9 +99,41 @@ export default function App(): React.ReactElement {
                 <XIcon className="h-5 w-5" />
               </button>
             </div>
+
+            <div className="space-y-4 pt-2">
+              <h3 className="text-lg font-semibold text-slate-700 text-center">Выберите режим разделения</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  onClick={() => setSplitMode('size')}
+                  className={`flex flex-col items-center justify-center text-center p-6 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                    splitMode === 'size'
+                      ? 'border-blue-600 bg-blue-50 shadow-md ring-2 ring-blue-500'
+                      : 'border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <LayersIcon className="h-10 w-10 mb-3 text-blue-600" />
+                  <span className="font-semibold text-slate-800">По размеру</span>
+                  <span className="text-sm text-slate-500 mt-1">Части до 10 МБ</span>
+                </button>
+                <button
+                  onClick={() => setSplitMode('page')}
+                  className={`flex flex-col items-center justify-center text-center p-6 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                    splitMode === 'page'
+                      ? 'border-blue-600 bg-blue-50 shadow-md ring-2 ring-blue-500'
+                      : 'border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-slate-100'
+                  }`}
+                >
+                  <FileTextIcon className="h-10 w-10 mb-3 text-blue-600" />
+                  <span className="font-semibold text-slate-800">Постранично</span>
+                  <span className="text-sm text-slate-500 mt-1">Каждая страница - новый файл</span>
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={handleSplitPdf}
-              className="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-300"
+              disabled={!splitMode}
+              className="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-300 disabled:bg-blue-300 disabled:cursor-not-allowed"
             >
               Разделить файл
             </button>
